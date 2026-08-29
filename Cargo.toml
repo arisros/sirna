@@ -4,11 +4,10 @@ members = [
     "crates/core",
     "crates/cli",
     "crates/server",
+    "crates/ffi",
     "crates/wasm",
     "crates/xtask",
 ]
-# ffi lands in M4. It stays out of `members` until it has real contents so
-# that `cargo test --workspace` is green from day one.
 
 [workspace.package]
 version = "0.1.0"

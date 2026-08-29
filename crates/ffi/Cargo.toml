@@ -1,0 +1,28 @@
+[package]
+name = "sirna-ffi"
+description = "uniffi bindings: the same envelope core, callable from Kotlin."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "sirna_ffi"
+
+# Ships its own bindgen so the generator version can never drift from the
+# runtime version — a mismatch there produces Kotlin that compiles and then
+# misbehaves at run time.
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+sirna-core.workspace = true
+uniffi = { version = "0.28", features = ["cli"] }
+rand = "0.8"
+thiserror = "2"
+
+[dev-dependencies]
+sirna-core.workspace = true

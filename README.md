@@ -102,9 +102,9 @@ flowchart TD
     core -. "header parser only" .-> srv["<b>server</b><br/>blob store<br/><i>cannot decrypt</i>"]
 
     spec[("<b>spec/vectors</b><br/>22 byte-exact vectors")]
-    spec -.->|"all four must agree"| cli
-    spec -.-> wasm
-    spec -.-> ffi
+    spec -.->|"22/22 ✓"| cli
+    spec -.->|"22/22 ✓"| wasm
+    spec -.->|"22/22 ✓"| ffi
 
     style core fill:#dff,stroke:#079,stroke-width:2px,color:#000
     style spec fill:#ffd,stroke:#a80,color:#000
@@ -180,13 +180,14 @@ Live at **[sirna.arisjirat.com](https://sirna.arisjirat.com)**.
 | `crates/cli` | ✅ |
 | `crates/server` — blob store over Garage | ✅ deployed |
 | `crates/wasm` + web | ✅ deployed |
-| `crates/ffi` + Android — Keystore, shred | ⬜ |
+| `crates/ffi` — Kotlin bindings, 22/22 vectors on the JVM | ✅ |
+| Android app — Keystore, shred | ⬜ |
 
 ```bash
 just check     # doctor + lint + test + spec-lint
 ```
 
-54 tests. `core` is `#![forbid(unsafe_code)]`.
+62 tests. `core` is `#![forbid(unsafe_code)]`.
 
 ---
 
