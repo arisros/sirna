@@ -74,6 +74,19 @@
       "expect": "ok"
     },
     {
+      "id": "v007-passphrase",
+      "description": "sealed under a passphrase; salt is in the header",
+      "key_hex": "",
+      "mnemonic": "",
+      "chunk_log2": 10,
+      "plaintext_len": 64,
+      "plaintext_b3": "c96af8e6dd0d8036c15b0e6c7288ef896629e113e091042fdf8cb69f7aadf740",
+      "envelope_file": "v007-passphrase.bin",
+      "envelope_b3": "674f5ef7380441e0b8dda730b87be895cf7f2d0422fbaf1d5308a1bc9026bc85",
+      "expect": "ok",
+      "passphrase": "correct horse battery staple"
+    },
+    {
       "id": "n001-bad-magic",
       "description": "first byte of the magic altered",
       "key_hex": "0707070707070707070707070707070707070707070707070707070707070707",

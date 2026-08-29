@@ -11,6 +11,15 @@ use crate::error::{ErrorCode, Result};
 
 pub const KEY_LEN: usize = 32;
 
+/// Argon2id parameters, fixed by the format — see `spec/ENVELOPE.md` §2.
+///
+/// 64 MiB is the largest memory cost that reliably survives mobile Safari and
+/// low-end Android without being OOM-killed. Raising it would lock out the
+/// devices this is meant to run on.
+pub const ARGON2_M_COST: u32 = 65_536; // KiB
+pub const ARGON2_T_COST: u32 = 3;
+pub const ARGON2_P_COST: u32 = 1;
+
 const URI_PREFIX: &str = "sirna1:";
 const URI_VERSION: u8 = 1;
 
@@ -38,6 +47,31 @@ impl SecretKey {
 
     pub fn as_bytes(&self) -> &[u8; KEY_LEN] {
         &self.0
+    }
+
+    /// Derive a key from a passphrase and the envelope's salt.
+    ///
+    /// The salt lives in the header in the clear, which is fine — a salt is not
+    /// a secret, it exists so that two people who choose the same passphrase do
+    /// not produce the same key.
+    ///
+    /// Worth being blunt about: a passphrase a human invented has far less
+    /// entropy than the 256 random bits used elsewhere. Argon2id makes guessing
+    /// expensive, not impossible. This mode exists for cases where handing over
+    /// 24 words is impractical, and it is weaker.
+    pub fn from_passphrase(passphrase: &str, salt: &[u8; 16]) -> Result<Self> {
+        let params =
+            argon2::Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LEN))
+                .map_err(|_| ErrorCode::KeyDecodeFailed)?;
+
+        let argon =
+            argon2::Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+
+        let mut out = [0u8; KEY_LEN];
+        argon
+            .hash_password_into(passphrase.as_bytes(), salt, &mut out)
+            .map_err(|_| ErrorCode::KeyDecodeFailed)?;
+        Ok(Self(out))
     }
 
     /// BIP-39, 24 words, English. The wordlist checksum catches transcription

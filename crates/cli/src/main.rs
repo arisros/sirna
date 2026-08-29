@@ -13,7 +13,10 @@ use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use qrcode::render::unicode;
 use qrcode::QrCode;
-use sirna_core::{open, seal, SealOptions, SecretKey, CHUNK_LOG2_DEFAULT};
+use sirna_core::{
+    open, open_with_passphrase, seal, seal_with_passphrase, SealOptions, SecretKey,
+    CHUNK_LOG2_DEFAULT,
+};
 
 #[derive(Parser)]
 #[command(
@@ -44,13 +47,25 @@ enum Command {
         /// Also render the key as a QR code in the terminal.
         #[arg(long)]
         qr: bool,
+        /// Derive the key from a passphrase instead of generating one.
+        /// Weaker: a passphrase carries far less entropy than 256 random bits.
+        #[arg(long, conflicts_with = "qr")]
+        passphrase: Option<String>,
     },
     /// Decrypt an envelope using a mnemonic or a `sirna1:` URI.
     Open {
         input: PathBuf,
         /// The key. Accepts 24 words or a `sirna1:` URI.
-        #[arg(short, long)]
-        key: String,
+        #[arg(
+            short,
+            long,
+            conflicts_with = "passphrase",
+            required_unless_present = "passphrase"
+        )]
+        key: Option<String>,
+        /// Open an envelope that was sealed with `--passphrase`.
+        #[arg(long)]
+        passphrase: Option<String>,
         /// Where to write the plaintext. Defaults to stdout.
         #[arg(short, long)]
         out: Option<PathBuf>,
@@ -176,6 +191,7 @@ fn main() -> Result<()> {
             expire,
             chunk,
             qr,
+            passphrase,
         } => {
             let (plaintext, filename) = read_input(&input)?;
             let now = now_unix();
@@ -188,24 +204,52 @@ fn main() -> Result<()> {
             };
 
             let mut rng = rand::rngs::OsRng;
-            let (envelope, key) = seal(&plaintext, &opts, &mut rng, now)
-                .map_err(|e| anyhow::anyhow!("sealing failed: {e}"))?;
-
             let target =
                 out.or_else(|| (input != "-").then(|| PathBuf::from(format!("{input}.sirna"))));
-            write_output(target, &envelope)?;
-            print_key(&key, qr)?;
+
+            match passphrase {
+                Some(p) => {
+                    let envelope = seal_with_passphrase(&plaintext, &p, &opts, &mut rng, now)
+                        .map_err(|e| anyhow::anyhow!("sealing failed: {e}"))?;
+                    write_output(target, &envelope)?;
+                    eprintln!();
+                    eprintln!("  Sealed with a passphrase. There is no key to hand over —");
+                    eprintln!("  the reader needs the passphrase and nothing else.");
+                    eprintln!();
+                    eprintln!("  This is weaker than the default: a passphrase you invented");
+                    eprintln!("  has far less entropy than 256 random bits, and Argon2id makes");
+                    eprintln!("  guessing expensive rather than impossible.");
+                    eprintln!();
+                }
+                None => {
+                    let (envelope, key) = seal(&plaintext, &opts, &mut rng, now)
+                        .map_err(|e| anyhow::anyhow!("sealing failed: {e}"))?;
+                    write_output(target, &envelope)?;
+                    print_key(&key, qr)?;
+                }
+            }
         }
 
-        Command::Open { input, key, out } => {
+        Command::Open {
+            input,
+            key,
+            passphrase,
+            out,
+        } => {
             let envelope =
                 std::fs::read(&input).with_context(|| format!("reading {}", input.display()))?;
-            let key = SecretKey::parse(&key).map_err(|e| anyhow::anyhow!("{e}"))?;
 
             // The numeric code is part of the cross-target contract, so it is
             // surfaced rather than swallowed into prose.
-            let opened = open(&envelope, &key, now_unix())
-                .map_err(|e| anyhow::anyhow!("{e} (code {})", e.code()))?;
+            let opened = match (key, passphrase) {
+                (_, Some(p)) => open_with_passphrase(&envelope, &p, now_unix()),
+                (Some(k), None) => {
+                    let key = SecretKey::parse(&k).map_err(|e| anyhow::anyhow!("{e}"))?;
+                    open(&envelope, &key, now_unix())
+                }
+                (None, None) => unreachable!("clap requires one of --key or --passphrase"),
+            }
+            .map_err(|e| anyhow::anyhow!("{e} (code {})", e.code()))?;
 
             if let Some(name) = &opened.meta.filename {
                 eprintln!("  filename: {name}");

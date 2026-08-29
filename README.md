@@ -99,7 +99,7 @@ flowchart TD
     core --> ffi["<b>ffi</b><br/>Android · Keystore"]
     core -. "header parser only" .-> srv["<b>server</b><br/>blob store<br/><i>cannot decrypt</i>"]
 
-    spec[("<b>spec/vectors</b><br/>21 byte-exact vectors")]
+    spec[("<b>spec/vectors</b><br/>22 byte-exact vectors")]
     spec -.->|"all four must agree"| cli
     spec -.-> wasm
     spec -.-> ffi
@@ -171,7 +171,7 @@ sent hunting for their key.
 
 | | |
 |---|---|
-| `spec/ENVELOPE.md` + 21 vectors | ✅ |
+| `spec/ENVELOPE.md` + 22 vectors | ✅ |
 | `crates/core` | ✅ |
 | `crates/cli` | ✅ |
 | `crates/server` — blob store over Garage | ✅ |
@@ -182,7 +182,7 @@ sent hunting for their key.
 just check     # doctor + lint + test + spec-lint
 ```
 
-50 tests. `core` is `#![forbid(unsafe_code)]`.
+54 tests. `core` is `#![forbid(unsafe_code)]`.
 
 ---
 

@@ -135,3 +135,64 @@ fn secret_key_never_prints_material() {
     assert_eq!(shown, "SecretKey(<redacted>)");
     assert!(!shown.contains("ab"), "key bytes must not reach a log line");
 }
+
+#[test]
+fn passphrase_mode_round_trips() {
+    let mut r = rng();
+    let env = sirna_core::seal_with_passphrase(
+        b"under the floorboards",
+        "correct horse",
+        &opts(),
+        &mut r,
+        NOW,
+    )
+    .unwrap();
+
+    let got = sirna_core::open_with_passphrase(&env, "correct horse", NOW).unwrap();
+    assert_eq!(got.plaintext, b"under the floorboards");
+}
+
+#[test]
+fn passphrase_mode_rejects_the_wrong_passphrase() {
+    let mut r = rng();
+    let env = sirna_core::seal_with_passphrase(b"x", "right", &opts(), &mut r, NOW).unwrap();
+    assert_eq!(
+        sirna_core::open_with_passphrase(&env, "wrong", NOW).unwrap_err(),
+        ErrorCode::AuthFailed
+    );
+}
+
+#[test]
+fn the_same_passphrase_yields_different_envelopes() {
+    // A fresh salt per envelope means two people choosing the same passphrase
+    // do not end up with the same key, and one envelope tells you nothing about
+    // another.
+    let a = sirna_core::seal_with_passphrase(
+        b"x",
+        "same",
+        &opts(),
+        &mut ChaCha20Rng::seed_from_u64(1),
+        NOW,
+    )
+    .unwrap();
+    let b = sirna_core::seal_with_passphrase(
+        b"x",
+        "same",
+        &opts(),
+        &mut ChaCha20Rng::seed_from_u64(2),
+        NOW,
+    )
+    .unwrap();
+    assert_ne!(a[27..43], b[27..43], "salts must differ");
+    assert_ne!(a, b);
+}
+
+#[test]
+fn a_random_key_envelope_is_not_openable_as_a_passphrase_one() {
+    let mut r = rng();
+    let (env, _key) = seal(b"x", &opts(), &mut r, NOW).unwrap();
+    assert_eq!(
+        sirna_core::open_with_passphrase(&env, "anything", NOW).unwrap_err(),
+        ErrorCode::KeyDecodeFailed
+    );
+}

@@ -16,7 +16,10 @@ use anyhow::{bail, Context, Result};
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use serde::{Deserialize, Serialize};
-use sirna_core::{header::HEADER_LEN, open, seal_with_key, SealOptions, SecretKey};
+use sirna_core::{
+    header::HEADER_LEN, open, open_with_passphrase, seal_with_key, seal_with_passphrase,
+    SealOptions, SecretKey,
+};
 
 /// Fixed clock for every vector. A real timestamp would make the corpus
 /// non-reproducible and would start failing on its own once expiry passed.
@@ -43,6 +46,11 @@ pub struct Vector {
     pub envelope_b3: String,
     /// `"ok"`, or the numeric error code from `spec/ENVELOPE.md` §9 as a string.
     pub expect: String,
+    /// Present only for passphrase-mode vectors. The salt lives in the header,
+    /// so a client can reproduce the key from this string alone — which is
+    /// exactly the property that has to match across targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passphrase: Option<String>,
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -73,6 +81,10 @@ struct Case {
     /// `None` means the vector is expected to open cleanly.
     tamper: Option<fn(&mut Vec<u8>)>,
     expect: &'static str,
+    /// When set, the vector is sealed under this passphrase instead of
+    /// `key_seed`. Cross-target conformance for Argon2id matters as much as for
+    /// the AEAD: if one client derives differently, files silently stop opening.
+    passphrase: Option<&'static str>,
 }
 
 fn meta_len(env: &[u8]) -> usize {
@@ -90,6 +102,7 @@ fn cases() -> Vec<Case> {
             key_seed: 1,
             tamper: None,
             expect: "ok",
+            passphrase: None,
         },
         Case {
             id: "v002-tiny-text",
@@ -99,6 +112,7 @@ fn cases() -> Vec<Case> {
             key_seed: 2,
             tamper: None,
             expect: "ok",
+            passphrase: None,
         },
         Case {
             id: "v003-exact-chunk",
@@ -108,6 +122,7 @@ fn cases() -> Vec<Case> {
             key_seed: 3,
             tamper: None,
             expect: "ok",
+            passphrase: None,
         },
         Case {
             id: "v004-chunk-plus-one",
@@ -117,6 +132,7 @@ fn cases() -> Vec<Case> {
             key_seed: 4,
             tamper: None,
             expect: "ok",
+            passphrase: None,
         },
         Case {
             id: "v005-multi-chunk",
@@ -126,6 +142,7 @@ fn cases() -> Vec<Case> {
             key_seed: 5,
             tamper: None,
             expect: "ok",
+            passphrase: None,
         },
         Case {
             id: "v006-large-chunk-size",
@@ -135,6 +152,17 @@ fn cases() -> Vec<Case> {
             key_seed: 6,
             tamper: None,
             expect: "ok",
+            passphrase: None,
+        },
+        Case {
+            id: "v007-passphrase",
+            description: "sealed under a passphrase; salt is in the header",
+            len: 64,
+            chunk_log2: 10,
+            key_seed: 0,
+            tamper: None,
+            expect: "ok",
+            passphrase: Some("correct horse battery staple"),
         },
         Case {
             id: "n001-bad-magic",
@@ -144,6 +172,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[0] = b'X'),
             expect: "1",
+            passphrase: None,
         },
         Case {
             id: "n002-bad-version",
@@ -153,6 +182,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[4] = 2),
             expect: "2",
+            passphrase: None,
         },
         Case {
             id: "n003-bad-suite",
@@ -162,6 +192,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[5] = 99),
             expect: "3",
+            passphrase: None,
         },
         Case {
             id: "n004-reserved-set",
@@ -171,6 +202,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[7] = 1),
             expect: "4",
+            passphrase: None,
         },
         Case {
             id: "n005-unknown-flag",
@@ -180,6 +212,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[6] |= 0b1000_0000),
             expect: "4",
+            passphrase: None,
         },
         Case {
             id: "n006-chunk-log2-low",
@@ -189,6 +222,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[43] = 4),
             expect: "10",
+            passphrase: None,
         },
         Case {
             id: "n007-chunk-log2-high",
@@ -198,6 +232,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[43] = 40),
             expect: "10",
+            passphrase: None,
         },
         Case {
             id: "n008-nonce-tamper",
@@ -207,6 +242,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e[8] ^= 0x01),
             expect: "5",
+            passphrase: None,
         },
         Case {
             id: "n009-tag-tamper",
@@ -219,6 +255,7 @@ fn cases() -> Vec<Case> {
                 e[l] ^= 0x01;
             }),
             expect: "5",
+            passphrase: None,
         },
         Case {
             id: "n010-truncated-boundary",
@@ -231,6 +268,7 @@ fn cases() -> Vec<Case> {
                 e.truncate(cut);
             }),
             expect: "6",
+            passphrase: None,
         },
         Case {
             id: "n011-truncated-mid",
@@ -243,6 +281,7 @@ fn cases() -> Vec<Case> {
                 e.truncate(l);
             }),
             expect: "6",
+            passphrase: None,
         },
         Case {
             id: "n012-trailing",
@@ -252,6 +291,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e.extend_from_slice(b"extra")),
             expect: "7",
+            passphrase: None,
         },
         Case {
             id: "n013-swapped-chunks",
@@ -268,6 +308,7 @@ fn cases() -> Vec<Case> {
                 e[start + full..start + 2 * full].copy_from_slice(&a);
             }),
             expect: "5",
+            passphrase: None,
         },
         Case {
             id: "n014-meta-len-overflow",
@@ -279,6 +320,7 @@ fn cases() -> Vec<Case> {
                 e[HEADER_LEN..HEADER_LEN + 4].copy_from_slice(&u32::MAX.to_le_bytes())
             }),
             expect: "4",
+            passphrase: None,
         },
         Case {
             id: "n015-short-buffer",
@@ -288,6 +330,7 @@ fn cases() -> Vec<Case> {
             key_seed: 7,
             tamper: Some(|e| e.truncate(20)),
             expect: "4",
+            passphrase: None,
         },
     ]
 }
@@ -307,8 +350,11 @@ pub fn generate(out_dir: &Path) -> Result<usize> {
         // Seed derived from the id so each vector is independent yet stable.
         let seed = case.id.bytes().map(u64::from).sum::<u64>();
         let mut rng = ChaCha20Rng::seed_from_u64(seed);
-        let mut envelope = seal_with_key(&plaintext, &key, &opts, &mut rng, VECTOR_NOW)
-            .map_err(|e| anyhow::anyhow!("sealing {}: {e}", case.id))?;
+        let mut envelope = match case.passphrase {
+            Some(p) => seal_with_passphrase(&plaintext, p, &opts, &mut rng, VECTOR_NOW),
+            None => seal_with_key(&plaintext, &key, &opts, &mut rng, VECTOR_NOW),
+        }
+        .map_err(|e| anyhow::anyhow!("sealing {}: {e}", case.id))?;
 
         if let Some(t) = case.tamper {
             t(&mut envelope);
@@ -318,10 +364,19 @@ pub fn generate(out_dir: &Path) -> Result<usize> {
         fs::write(out_dir.join(&file), &envelope)?;
 
         entries.push(Vector {
+            passphrase: case.passphrase.map(str::to_string),
             id: case.id.to_string(),
             description: case.description.to_string(),
-            key_hex: hex(key.as_bytes()),
-            mnemonic: key.to_mnemonic(),
+            key_hex: if case.passphrase.is_some() {
+                String::new()
+            } else {
+                hex(key.as_bytes())
+            },
+            mnemonic: if case.passphrase.is_some() {
+                String::new()
+            } else {
+                key.to_mnemonic()
+            },
             chunk_log2: case.chunk_log2,
             plaintext_len: case.len as u64,
             plaintext_b3: b3(&plaintext),
@@ -372,15 +427,18 @@ pub fn verify(dir: &Path) -> Result<(usize, usize)> {
             continue;
         }
 
-        let key = SecretKey::from_mnemonic(&v.mnemonic)
-            .map_err(|e| anyhow::anyhow!("{}: bad mnemonic in manifest: {e}", v.id))?;
-        if hex(key.as_bytes()) != v.key_hex {
-            eprintln!("FAIL {}: mnemonic and key_hex disagree", v.id);
-            failed += 1;
-            continue;
-        }
-
-        let outcome = open(&envelope, &key, VECTOR_NOW);
+        let outcome = if let Some(p) = &v.passphrase {
+            open_with_passphrase(&envelope, p, VECTOR_NOW)
+        } else {
+            let key = SecretKey::from_mnemonic(&v.mnemonic)
+                .map_err(|e| anyhow::anyhow!("{}: bad mnemonic in manifest: {e}", v.id))?;
+            if hex(key.as_bytes()) != v.key_hex {
+                eprintln!("FAIL {}: mnemonic and key_hex disagree", v.id);
+                failed += 1;
+                continue;
+            }
+            open(&envelope, &key, VECTOR_NOW)
+        };
         let ok = match (&v.expect[..], outcome) {
             ("ok", Ok(got)) => {
                 let len_ok = got.plaintext.len() as u64 == v.plaintext_len;

@@ -79,8 +79,44 @@ pub fn seal(
     now_unix: u64,
 ) -> Result<(Vec<u8>, SecretKey)> {
     let key = SecretKey::generate(rng);
-    let env = seal_with_key(plaintext, &key, opts, rng, now_unix)?;
+    let env = seal_inner(plaintext, &key, opts, rng, now_unix, None)?;
     Ok((env, key))
+}
+
+/// Seal under a passphrase instead of a random key.
+///
+/// A fresh salt is generated and stored in the header, so two people who pick
+/// the same passphrase still produce different keys. There is no key to hand
+/// back — the reader needs the passphrase and nothing else.
+///
+/// This mode is weaker than the random-key one and the caller should say so in
+/// its interface: a passphrase a human invented carries far less entropy than
+/// 256 random bits, and Argon2id makes guessing expensive rather than
+/// impossible.
+pub fn seal_with_passphrase(
+    plaintext: &[u8],
+    passphrase: &str,
+    opts: &SealOptions,
+    rng: &mut (impl RngCore + CryptoRng),
+    now_unix: u64,
+) -> Result<Vec<u8>> {
+    let mut salt = [0u8; 16];
+    rng.fill_bytes(&mut salt);
+    let key = SecretKey::from_passphrase(passphrase, &salt)?;
+    seal_inner(plaintext, &key, opts, rng, now_unix, Some(salt))
+}
+
+/// Open an envelope that was sealed under a passphrase. The salt comes from the
+/// header, which is authenticated, so it cannot be swapped without failing.
+pub fn open_with_passphrase(envelope: &[u8], passphrase: &str, now_unix: u64) -> Result<Opened> {
+    let header = Header::parse(envelope)?;
+    if header.flags & FLAG_PASSPHRASE == 0 {
+        // Refusing here is friendlier than letting the derivation run and
+        // reporting a generic authentication failure a second later.
+        return Err(ErrorCode::KeyDecodeFailed);
+    }
+    let key = SecretKey::from_passphrase(passphrase, &header.kdf_salt)?;
+    open(envelope, &key, now_unix)
 }
 
 pub fn seal_with_key(
@@ -89,6 +125,17 @@ pub fn seal_with_key(
     opts: &SealOptions,
     rng: &mut (impl RngCore + CryptoRng),
     now_unix: u64,
+) -> Result<Vec<u8>> {
+    seal_inner(plaintext, key, opts, rng, now_unix, None)
+}
+
+fn seal_inner(
+    plaintext: &[u8],
+    key: &SecretKey,
+    opts: &SealOptions,
+    rng: &mut (impl RngCore + CryptoRng),
+    now_unix: u64,
+    passphrase_salt: Option<[u8; 16]>,
 ) -> Result<Vec<u8>> {
     let chunk_log2 = opts.chunk_log2.unwrap_or(CHUNK_LOG2_DEFAULT);
     if !(CHUNK_LOG2_MIN..=CHUNK_LOG2_MAX).contains(&chunk_log2) {
@@ -102,6 +149,9 @@ pub fn seal_with_key(
     if opts.custody {
         flags |= FLAG_CUSTODY;
     }
+    if passphrase_salt.is_some() {
+        flags |= FLAG_PASSPHRASE;
+    }
 
     let mut stream_nonce = [0u8; 19];
     rng.fill_bytes(&mut stream_nonce);
@@ -109,7 +159,7 @@ pub fn seal_with_key(
     let header = Header {
         flags,
         stream_nonce,
-        kdf_salt: [0u8; 16], // passphrase mode lands in M2
+        kdf_salt: passphrase_salt.unwrap_or([0u8; 16]),
         chunk_log2,
     };
     let header_bytes = header.to_bytes();
