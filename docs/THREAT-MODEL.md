@@ -35,9 +35,22 @@ and makes the key the only scarce, destructible object.
 ### 1. A reader who decides to keep it
 
 They can screenshot, photograph the screen with a second phone, OCR it, or
-retype it. `FLAG_SECURE` blocks the stock screenshot API and the recents
-thumbnail; it does not block a camera pointed at a screen, a rooted device, or a
-modified OS.
+retype it.
+
+What each platform can do about the screenshot half of that, which is the
+easiest half:
+
+| | |
+|---|---|
+| Android app | `FLAG_SECURE` blocks the stock screenshot API and the recents thumbnail |
+| **iOS app** | **nothing — iOS has no equivalent** |
+| Any browser, including Safari and Chrome | nothing |
+
+None of them block a camera pointed at the screen, a rooted or jailbroken
+device, or a modified OS. So `FLAG_SECURE` raises the effort for someone who
+was not really trying; it stops nobody who is. Read the table as a difference in
+convenience, not in protection — a message you would be harmed by someone
+keeping should not be sent to someone who might.
 
 **There is no technology that solves this, and Sirna does not pretend to.**
 
@@ -46,7 +59,19 @@ modified OS.
 Anyone can fork the client and make it write plaintext to disk before you shred.
 Deletion on a device you do not control is not enforceable.
 
-### 3. The web client has no code integrity
+### 3. On iOS, the browser is currently the only client
+
+There is no iOS app yet, so an iPhone uses the web client — which means every
+limitation in §4 applies, and the `FLAG_SECURE` row above is moot because there
+is nothing to apply it to.
+
+When an iOS app does exist it will use the Secure Enclave, which holds only
+P-256 keys rather than AES ones, so the content key will be wrapped by ECIES
+instead of by a symmetric enclave key. The guarantee is the same — delete the
+enclave key and every copy of the ciphertext dies — but it is a different
+mechanism from Android's, and worth knowing when reasoning about either.
+
+### 4. The web client has no code integrity
 
 This is the one most people miss, so it is stated bluntly.
 
@@ -56,17 +81,18 @@ keys, and **the browser gives the visitor no way to detect it.** Strict CSP, SRI
 on every asset, and published reproducible build hashes raise the cost. They do
 not close the hole.
 
-**The CLI and the Android app are the clients with real integrity. The web
+**The CLI and the Android app are the clients with real integrity; on iOS
+there is currently no such option at all. The web
 client is a convenience with a weaker guarantee, and it says so in its own
 interface.**
 
-### 4. Metadata the server necessarily learns
+### 5. Metadata the server necessarily learns
 
 That a message exists, its padded size, when it was created, whether and when it
 was read, and the requesting IP at request time. Padding blunts size; not
 retaining IPs blunts the rest. Neither eliminates them.
 
-### 5. Rendezvous impersonation
+### 6. Rendezvous impersonation
 
 In custody mode the relay could try to impersonate the reader to the owner. Two
 things stand in the way: the release is signed by the owner's long-term identity
@@ -79,23 +105,23 @@ through without looking, the relay can obtain the key. This is why the approve
 button stays disabled until the owner enters the matching digits — the UI is
 part of the mitigation, not decoration on top of it.
 
-### 6. Owner-device compromise before the shred
+### 7. Owner-device compromise before the shred
 
 Total. StrongBox protects against key *extraction*, not against an attacker who
 can drive the app.
 
-### 7. No recovery, ever
+### 8. No recovery, ever
 
 Lose the mnemonic and the data is gone. Delete the alias and the data is gone.
 This is the feature. There is no undo, no support ticket, and no master key that
 could bring it back.
 
-### 8. Post-quantum
+### 9. Post-quantum
 
 The X25519 key-release channel is vulnerable to store-now-decrypt-later. The
 at-rest envelope, being symmetric XChaCha20-Poly1305, is not.
 
-### 9. Traffic analysis, coercion, and endpoint malware
+### 10. Traffic analysis, coercion, and endpoint malware
 
 Out of scope. A tool that hides message contents cannot hide that you are
 talking to someone, and it cannot help you if you are compelled to unlock it.
