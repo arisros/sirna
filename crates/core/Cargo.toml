@@ -1,0 +1,23 @@
+[package]
+name = "sirna-core"
+description = "Sirna envelope format: chunked AEAD, key schedule, key encodings. No I/O, no clock, no network."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+blake3 = { version = "1.5", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+zeroize = { version = "1.8", features = ["derive"] }
+subtle = { version = "2.6", default-features = false }
+ciborium = "0.2"
+serde = { version = "1", features = ["derive"] }
+bip39 = { version = "2", default-features = false, features = ["std"] }
+base64 = "0.22"
+
+[dev-dependencies]
+rand_chacha = "0.3"
+proptest = "1"

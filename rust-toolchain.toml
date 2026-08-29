@@ -1,0 +1,6 @@
+# For CI and other machines. On the homelab host, mise exports RUSTUP_TOOLCHAIN,
+# which OVERRIDES this file silently — see mise.toml and `just doctor`.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]

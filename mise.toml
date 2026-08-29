@@ -1,0 +1,10 @@
+# This is what actually wins on the homelab host. mise exports RUSTUP_TOOLCHAIN,
+# and that variable beats rust-toolchain.toml with no warning at all.
+[tools]
+rust = "1.95.0"
+
+[env]
+RUSTUP_TOOLCHAIN = "1.95.0"
+# A multi-target build tree can reach several GB. `/` has ~4.6 GB free while
+# /home has ~89 GB, so keep artifacts off the root filesystem.
+CARGO_TARGET_DIR = "/home/workspace/.cargo-target/sirna"

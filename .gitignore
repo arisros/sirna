@@ -1,0 +1,12 @@
+/target
+/web/node_modules
+/web/dist
+/android/build
+/android/.gradle
+/crates/wasm/pkg
+*.sirna
+*.db
+*.db-wal
+*.db-shm
+.env
+.DS_Store
