@@ -1,95 +1,198 @@
 # Sirna
 
-*sirna* — Indonesian: to vanish without leaving a trace.
+*sirna* — Indonesian: **to vanish without leaving a trace.**
 
 Encrypted messages and files whose **key** can be destroyed on demand. Destroy
-the key and every copy of the ciphertext — anywhere in the world, including
-copies you do not control — becomes permanently unreadable at the same instant.
+the key, and every copy of the ciphertext — anywhere, including copies you do
+not control — dies at the same instant.
 
-## The idea in one paragraph
+> **The promise is "destroy the key", not "destroy the copy."**
+> You cannot delete data off someone else's device. You *can* delete a key out
+> of a hardware secure element, and silicon enforces that.
+> → [Threat model](docs/THREAT-MODEL.md)
 
-You cannot delete data off someone else's device. Nobody can, and products that
-claim to are relying on the recipient's goodwill and calling it security. But
-you *can* delete a key out of a hardware secure element, and that deletion is
-enforced by silicon rather than by politeness. So Sirna inverts the usual
-design: ciphertext is treated as worthless public litter that may exist forever,
-and the key becomes the only scarce, destructible object.
+---
 
-The promise is **"destroy the key", not "destroy the copy"** — see
-[`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md), which is required reading before
-trusting this with anything that matters.
+## How it works
 
-## What makes it different from a paste-bin with encryption
+```mermaid
+flowchart LR
+    subgraph owner["Owner's device"]
+        P[plaintext] -->|"XChaCha20-Poly1305"| E[envelope]
+        K([key]):::key -.-> E
+    end
 
-The server is **structurally incapable** of reading anything. Not by policy, not
-by promise — the key never reaches it, and the server binary does not even link
-a decryption path. There is no master key in an environment variable anywhere in
-the deployment.
+    E -->|"public channel<br/>WhatsApp, email, S3"| R
+    K -->|"separate channel<br/>QR, spoken, P2P"| R
 
-The key also never travels in the URL. Sirna deliberately rejects the
-`example.com/#key` pattern: link and key go over separate channels, so leaking
-one of them is not enough.
+    subgraph reader["Reader's device"]
+        R{{both halves}} --> O[plaintext]
+    end
+
+    S[["server<br/>sees only the envelope"]]:::srv
+    E -.-> S
+
+    classDef key fill:#f9c,stroke:#b06,stroke-width:2px,color:#000
+    classDef srv fill:#eee,stroke:#999,stroke-dasharray:4,color:#000
+```
+
+The key never touches the server, and never rides in the URL. Leaking one
+channel is not enough.
+
+---
+
+## Using it
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor A as You
+    participant C as sirna
+    actor B as Recipient
+
+    A->>C: sirna seal report.pdf
+    Note over C: key generated<br/>on your machine
+    C-->>A: report.pdf.sirna
+    C-->>A: 24 words + QR — shown once
+
+    A->>B: send the file (any channel)
+    A-->>B: show the QR / read the words<br/>(a different channel)
+
+    B->>C: sirna open report.pdf.sirna --key "..."
+    C-->>B: report.pdf
+```
+
+```bash
+sirna seal report.pdf          # → report.pdf.sirna, prints 24 words once
+sirna open report.pdf.sirna --key "legal winner thank ..."
+sirna keygen --qr              # QR in the terminal; key never hits a network
+sirna inspect report.pdf.sirna # what a stranger can learn: almost nothing
+```
+
+→ [Full CLI guide](docs/usage-cli.md)
+
+---
+
+## What a stranger sees
+
+```
+$ sirna inspect report.pdf.sirna
+format version : 1
+chunk size     : 65536 bytes
+kind           : file
+envelope size  : 104883299 bytes
+```
+
+That is everything. Filename, MIME type, true length, expiry and any note are
+inside the encrypted metadata block.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    core["<b>crates/core</b><br/>envelope format<br/>no I/O · no clock · no network"]
+
+    core --> cli["<b>cli</b><br/>seal · open<br/>vector generator"]
+    core --> wasm["<b>wasm</b><br/>browser"]
+    core --> ffi["<b>ffi</b><br/>Android · Keystore"]
+    core -. "header parser only" .-> srv["<b>server</b><br/>blob store<br/><i>cannot decrypt</i>"]
+
+    spec[("<b>spec/vectors</b><br/>21 byte-exact vectors")]
+    spec -.->|"all four must agree"| cli
+    spec -.-> wasm
+    spec -.-> ffi
+
+    style core fill:#dff,stroke:#079,stroke-width:2px,color:#000
+    style spec fill:#ffd,stroke:#a80,color:#000
+    style srv fill:#eee,stroke:#999,color:#000
+```
+
+`core` takes the clock and the RNG as parameters. That is not fastidiousness:
+wasm32 has no `SystemTime`, and byte-exact vectors are impossible without a
+seedable RNG — and those vectors are the only thing stopping four clients from
+silently drifting apart.
+
+`server` links `core` for the header parser only. "The server cannot decrypt" is
+a property of the build, not a promise in a README.
+
+---
+
+## Format
+
+```mermaid
+packet-beta
+0-3: "magic SRNA"
+4: "ver"
+5: "suite"
+6: "flags"
+7: "rsv"
+8-26: "stream_nonce (19 bytes)"
+27-42: "kdf_salt (16 bytes)"
+43: "clog2"
+```
+
+Then an encrypted metadata block, then chunks:
+
+```
+MetaChunk  u32le len ‖ AEAD(K_meta, …, CBOR{ filename, mime, length, expiry })
+DataChunk  AEAD(K_data, nonce_i, aad_i, plaintext_i)     × n
+
+nonce_i = stream_nonce ‖ u32be(i) ‖ last_flag
+aad_i   = BLAKE3(header) ‖ u32be(i) ‖ last_flag
+```
+
+Folding the header hash into every chunk's AAD authenticates the header without
+a separate MAC. Chunk boundaries come from the *authenticated* plaintext length,
+never guessed from bytes remaining — which is why a truncated download reports
+**truncated** instead of **wrong key**.
+
+→ [Normative spec](spec/ENVELOPE.md)
+
+---
+
+## Errors say what actually happened
+
+| | |
+|---|---|
+| `wrong key, or the envelope has been altered` | 5 |
+| `envelope is incomplete — data is missing from the end` | 6 |
+| `unexpected data after the end of the envelope` | 7 |
+| `this message has expired` | 9 |
+| `key checksum does not match — likely a typo` | 12 |
+
+Codes are identical across every client. Someone with a corrupt download is not
+sent hunting for their key.
+
+---
 
 ## Status
 
-Early. `core` and the envelope spec are done and tested; everything else is on
-the way.
-
-| Component | State |
+| | |
 |---|---|
-| `spec/ENVELOPE.md` — normative wire format v1 | done |
-| `crates/core` — chunked AEAD, key schedule, key encodings | done |
-| `crates/cli` — seal / open / vector generation | in progress |
-| `crates/server` — blob store in front of Garage | planned |
-| `crates/wasm` + `web/` — browser client | planned |
-| `crates/ffi` + `android/` — owner app, Keystore-backed | planned |
-
-## Design
-
-```
-crates/core     pure Rust — no I/O, no clock, no network
-  ├── cli       test tool and vector generator
-  ├── wasm      wasm-bindgen  → browser
-  ├── ffi       uniffi        → Android
-  └── server    dumb blob store + rendezvous relay
-spec/           the format, and the vectors every target is tested against
-```
-
-`core` takes the current time as a `now_unix: u64` parameter and its randomness
-as an injected RNG. That is not fastidiousness: wasm32 has no `SystemTime`, and
-byte-exact cross-target test vectors are impossible without a seedable RNG —
-and those vectors are the only thing that stops the CLI, the browser and the
-Android app from silently drifting apart.
-
-The envelope uses XChaCha20-Poly1305 in a STREAM construction with an explicit
-last-chunk flag, BLAKE3 for key derivation, and CBOR for encrypted metadata.
-Chunk boundaries are computed from the authenticated plaintext length rather
-than guessed from the remaining byte count, which is what lets a truncated
-download be reported as *truncated* instead of as a wrong key.
-
-## Building
+| `spec/ENVELOPE.md` + 21 vectors | ✅ |
+| `crates/core` | ✅ |
+| `crates/cli` | ✅ |
+| `crates/server` — blob store over Garage | ✅ |
+| `crates/wasm` + web | ⬜ |
+| `crates/ffi` + Android — Keystore, shred | ⬜ |
 
 ```bash
-cargo test --workspace     # 36 tests, including negative and property tests
-cargo clippy --all-targets -- -D warnings
+just check     # doctor + lint + test + spec-lint
 ```
 
-`core` is `#![forbid(unsafe_code)]`.
+50 tests. `core` is `#![forbid(unsafe_code)]`.
 
-On this homelab host, `mise` exports `RUSTUP_TOOLCHAIN`, which silently
-overrides `rust-toolchain.toml`. `mise.toml` in the project root is the file
-that actually wins locally; `rust-toolchain.toml` is there for CI and other
-machines. It also pins `CARGO_TARGET_DIR` onto `/home`, because `/` has very
-little free space and a multi-target build tree does not fit.
+---
 
-## Relationship to OTM
+## Successor to OTM
 
-Sirna is the successor to [otm](https://github.com/arisros/otm), but not a fork
-of it. OTM keeps a master `SECRET_KEY` on the server, which means the server can
-decrypt every message it holds. That is a reasonable trade for a teaching demo
-of applied cryptography, which is what OTM is and remains. It is not a
-reasonable trade for a tool that sells the word "secret", and it cannot be
-patched out — it is the shape of the whole design.
+[otm](https://github.com/arisros/otm) keeps a master `SECRET_KEY` on the server,
+so the server can decrypt everything it holds. Fine for a teaching demo of
+applied cryptography, which is what OTM is and remains — not fine for a tool
+that sells the word *secret*, and not patchable, because it is the shape of the
+whole design.
 
 ## License
 

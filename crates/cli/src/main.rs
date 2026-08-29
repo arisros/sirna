@@ -4,7 +4,7 @@
 //! over 24 words through some other channel, and the ciphertext is inert litter
 //! until those words show up.
 
-use sirna_cli::vectors;
+use sirna_cli::{remote, vectors};
 
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -61,6 +61,23 @@ enum Command {
     Keygen {
         #[arg(long)]
         qr: bool,
+    },
+    /// Upload an envelope to a server. The key is never sent.
+    Push {
+        input: PathBuf,
+        #[arg(long, env = "SIRNA_SERVER")]
+        server: String,
+        /// Seconds until the server drops it. Omit for the server default.
+        #[arg(long)]
+        ttl: Option<u64>,
+    },
+    /// Download an envelope. It can only be fetched once.
+    Pull {
+        id: String,
+        #[arg(long, env = "SIRNA_SERVER")]
+        server: String,
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     /// Generate or verify the cross-target test vectors.
     Vectors {
@@ -220,6 +237,26 @@ fn main() -> Result<()> {
             let mut rng = rand::rngs::OsRng;
             let key = SecretKey::generate(&mut rng);
             print_key(&key, qr)?;
+        }
+
+        Command::Push { input, server, ttl } => {
+            let envelope =
+                std::fs::read(&input).with_context(|| format!("reading {}", input.display()))?;
+            let created = remote::push(&server, &envelope, ttl)?;
+
+            // The id goes to stdout so it can be piped; everything else is
+            // commentary and belongs on stderr.
+            println!("{}", created.id);
+            eprintln!("  delete token : {}", created.delete_token);
+            eprintln!("  keep the delete token if you may want to withdraw this");
+            eprintln!();
+            eprintln!("  The server holds the envelope only. Send the key separately,");
+            eprintln!("  and remember it can be fetched exactly once.");
+        }
+
+        Command::Pull { id, server, out } => {
+            let envelope = remote::pull(&server, &id)?;
+            write_output(out, &envelope)?;
         }
 
         Command::Vectors { action } => match action {

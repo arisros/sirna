@@ -1,0 +1,48 @@
+[package]
+name = "sirna-server"
+description = "A blob store that cannot read what it stores."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "sirna-server"
+path = "src/main.rs"
+
+[dependencies]
+# core is linked for the header parser ONLY — see src/lib.rs. The server must
+# not be able to decrypt, and keeping the decrypt path unlinked makes that a
+# property of the build rather than a promise in a README.
+sirna-core.workspace = true
+
+axum = { version = "0.8", features = ["macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs", "io-util"] }
+tokio-util = { version = "0.7", features = ["io"] }
+tower-http = { version = "0.6", features = ["trace", "limit"] }
+futures-util = "0.3"
+
+rusqlite = { version = "0.32", features = ["bundled"] }
+# rust-s3 rather than aws-sdk-s3: the AWS SDK's default crypto provider
+# (aws-lc-sys) needs cmake, which is not installed on the build host, and
+# pulling in a C toolchain for one S3 client is a poor trade. rust-s3 speaks
+# path-style addressing against a custom endpoint, which is exactly Garage.
+rust-s3 = { version = "0.35", default-features = false, features = ["tokio-rustls-tls"] }
+
+serde = { workspace = true }
+serde_json = "1"
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rand = "0.8"
+blake3 = { workspace = true }
+hex = "0.4"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+tempfile = "3"
+rand_chacha.workspace = true
+serde_json = "1"

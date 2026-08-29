@@ -3,10 +3,11 @@ resolver = "2"
 members = [
     "crates/core",
     "crates/cli",
+    "crates/server",
     "crates/xtask",
 ]
-# wasm, ffi and server land in M2/M3. They stay out of `members` until they have
-# real contents so that `cargo test --workspace` is green from day one.
+# wasm and ffi land in M3/M4. They stay out of `members` until they have real
+# contents so that `cargo test --workspace` is green from day one.
 
 [workspace.package]
 version = "0.1.0"
