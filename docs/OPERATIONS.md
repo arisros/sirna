@@ -175,17 +175,29 @@ usual SDK default — would fail to resolve.
 
 ## 6. How one-time reads actually behave
 
-A download claims the blob with a single conditional UPDATE; only the
-transaction that changes exactly one row may stream. Everyone else gets 410.
+**The claim is the read.** A download claims the blob with a single conditional
+UPDATE that moves it straight from `live` to `consumed`; only the transaction
+that changes exactly one row may stream, and everyone else gets 410. There is no
+intermediate state and no way back.
 
-Objects are deleted by the **reaper**, not inline at the end of a download, and
-not until `DOWNLOAD_GRACE_SECS` has passed. This is deliberate: a reader whose
-connection drops mid-transfer would otherwise lose the message permanently with
-no recourse. A failed download hands the claim back and increments a counter,
-capped at three attempts.
+That means a blob is spent the moment it is claimed, **whatever happens
+afterwards**. A storage error, a dropped connection, a reader who closes the
+tab mid-transfer — the message is gone, and nobody receives it.
 
-The reaper also collects blobs stuck in `consuming`, which is what a crash
-mid-download leaves behind.
+This is deliberate and it is a real cost. An earlier version handed the claim
+back on a failed transfer, capped at three attempts, so a reader with a flaky
+connection was not left with nothing. That is the kinder failure mode and it is
+the wrong trade: it means a blob can be served more than once, and "once" is the
+entire promise. Softening it turns *once* into *usually once*, which is not a
+guarantee anyone can reason about.
+
+Expect support questions of the form "it said error and now it is gone". The
+answer is that this is working correctly, and the sender must send a new one.
+
+Objects are removed from the store by the **reaper**, not inline. Note what
+`DOWNLOAD_GRACE_SECS` now means: purely reaper scheduling, so an object is not
+deleted out from under a response still being written. It grants nobody a second
+attempt — a consumed blob is unreachable the instant it is claimed.
 
 ## 7. Health and monitoring
 

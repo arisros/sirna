@@ -191,11 +191,11 @@ async fn fetch<S: BlobStore>(
         Claim::Won => {}
     }
 
+    // The blob was already marked consumed by the claim itself. Whatever
+    // happens from here — a successful stream, a storage error, a dropped
+    // connection — it will never be served again.
     match st.store.get(&id).await {
         Ok(bytes) => {
-            let db = st.db.lock().await;
-            let _ = db.mark_consumed(&id);
-            drop(db);
             info!(%id, "delivered");
 
             Ok((
@@ -209,12 +209,10 @@ async fn fetch<S: BlobStore>(
                 .into_response())
         }
         Err(e) => {
-            // Hand the claim back. A reader whose connection dropped should get
-            // another chance rather than lose the message permanently.
-            let db = st.db.lock().await;
-            let _ = db.release(&id);
-            drop(db);
-            warn!(%id, error = %e, "store get failed; claim released");
+            // No retry. The claim stands, so this message is now gone for
+            // everyone — that is what one-time means, and softening it here
+            // would quietly turn "once" into "usually once".
+            warn!(%id, error = %e, "store get failed after the blob was claimed; it is now unrecoverable");
             Err(ApiError(StatusCode::BAD_GATEWAY, "storage unavailable"))
         }
     }

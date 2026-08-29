@@ -344,3 +344,51 @@ async fn a_malformed_api_path_does_not_return_the_web_app() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn a_failed_delivery_still_burns_the_message() {
+    // The strictest reading of one-time: a blob is spent the moment it is
+    // claimed, whatever happens to the transfer afterwards. An earlier version
+    // handed the claim back on a storage error so a reader with a dropped
+    // connection was not left with nothing — kinder, but it meant a blob could
+    // be served twice, and "once" is the whole promise.
+    let tmp = tempfile::tempdir().unwrap();
+    let blobs = tmp.path().join("blobs");
+    let db = Db::open(tmp.path().join("meta.db").to_str().unwrap()).unwrap();
+    let store = FsStore::new(&blobs).unwrap();
+
+    let state = Arc::new(AppState {
+        db: tokio::sync::Mutex::new(db),
+        store,
+        limiter: RateLimiter::new(10_000, 10_000.0),
+        max_blob_bytes: 1024 * 1024,
+        default_ttl: 3600,
+        max_ttl: 86_400,
+    });
+    let app = router(state);
+
+    let (status, out) = send(&app, post(envelope(b"only once"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let id = serde_json::from_slice::<serde_json::Value>(&out).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Simulate the object going missing between the claim and the read.
+    std::fs::remove_file(blobs.join(&id)).unwrap();
+
+    let (status, _) = send(&app, get(&id)).await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_GATEWAY,
+        "delivery should have failed"
+    );
+
+    // Even though nobody ever received it, it is spent.
+    let (status, _) = send(&app, get(&id)).await;
+    assert_eq!(
+        status,
+        StatusCode::GONE,
+        "a failed delivery must not hand the message back"
+    );
+}

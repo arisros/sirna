@@ -241,7 +241,8 @@ function readView(id) {
       "p",
       { class: "note" },
       "The key came to you separately — it is not part of this link. " +
-        "Opening this message removes it from the server permanently.",
+        "Opening this message uses it up — it is removed from the server the "
+        + "moment you press Open, even if something goes wrong afterwards.",
     ),
   );
 }
@@ -276,7 +277,8 @@ function openedView(o) {
     el(
       "div",
       { class: "card done" },
-      "This message has been removed from the server. Reloading this page will not bring it back.",
+      "This message has been removed from the server. Reloading will not bring it back, "
+      + "and nobody else can open it.",
     ),
   );
 }
