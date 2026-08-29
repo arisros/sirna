@@ -169,12 +169,15 @@ sent hunting for their key.
 
 ## Status
 
+Live at **[sirna.arisjirat.com](https://sirna.arisjirat.com)** — the server half.
+The clients are the CLI for now.
+
 | | |
 |---|---|
 | `spec/ENVELOPE.md` + 22 vectors | ✅ |
 | `crates/core` | ✅ |
 | `crates/cli` | ✅ |
-| `crates/server` — blob store over Garage | ✅ |
+| `crates/server` — blob store over Garage | ✅ deployed |
 | `crates/wasm` + web | ⬜ |
 | `crates/ffi` + Android — Keystore, shred | ⬜ |
 
