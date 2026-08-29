@@ -39,6 +39,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand = "0.8"
 blake3 = { workspace = true }
 hex = "0.4"
+# Assets are compiled into the binary: one container, no sidecar, and CSP is
+# set in exactly one place in code rather than in a web server config.
+rust-embed = "8"
+mime_guess = "2"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

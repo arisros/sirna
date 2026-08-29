@@ -1,0 +1,32 @@
+[package]
+name = "sirna-wasm"
+description = "Browser bindings for the Sirna envelope format."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+sirna-core.workspace = true
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde = { workspace = true }
+serde-wasm-bindgen = "0.6"
+# The browser has no OS RNG the way a host does; getrandom needs to be told to
+# use crypto.getRandomValues.
+getrandom = { version = "0.2", features = ["js"] }
+rand = { version = "0.8", default-features = false, features = ["getrandom"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[package.metadata.wasm-pack.profile.release]
+# wasm-pack ships a wasm-opt that predates the features rustc 1.95 emits, and it
+# refuses the module outright ("error validating input"). The optimiser is worth
+# little here anyway: almost all of the size is the crypto code itself, and the
+# release profile already applies LTO. Revisit if a system binaryen appears.
+wasm-opt = false

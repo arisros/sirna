@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sirna</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="wordmark" href="./">sirna</a>
+      <p class="tagline">Encrypted so that destroying the key destroys every copy.</p>
+    </header>
+
+    <main id="app" aria-live="polite"></main>
+
+    <footer>
+      <!-- Stated where people will actually see it, not buried in a document
+           nobody opens. The server serves the code that handles the key, so a
+           compromised server can serve a build that steals it — and the browser
+           gives a visitor no way to notice. -->
+      <p>
+        This web client has <strong>weaker integrity</strong> than the CLI or the
+        Android app.
+        <button type="button" class="linky" id="why-weaker">Why?</button>
+      </p>
+      <dialog id="weaker-dialog">
+        <h2>Why the web client is weaker</h2>
+        <p>
+          The server sends your browser the code that handles your key. A server
+          that has been compromised — or an operator who has been compelled —
+          could send a version that quietly keeps a copy, and there is no way for
+          you to tell from inside the browser.
+        </p>
+        <p>
+          The command-line tool and the Android app do not have this problem: you
+          install them once and can check what you installed.
+        </p>
+        <p>
+          Everything else holds. The key is generated here, never sent to the
+          server, and never put in the address bar.
+        </p>
+        <form method="dialog"><button>Close</button></form>
+      </dialog>
+    </footer>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

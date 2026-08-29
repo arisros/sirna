@@ -62,6 +62,8 @@ sequenceDiagram
     C-->>B: report.pdf
 ```
 
+In a browser, or from a terminal:
+
 ```bash
 sirna seal report.pdf          # → report.pdf.sirna, prints 24 words once
 sirna open report.pdf.sirna --key "legal winner thank ..."
@@ -169,8 +171,7 @@ sent hunting for their key.
 
 ## Status
 
-Live at **[sirna.arisjirat.com](https://sirna.arisjirat.com)** — the server half.
-The clients are the CLI for now.
+Live at **[sirna.arisjirat.com](https://sirna.arisjirat.com)**.
 
 | | |
 |---|---|
@@ -178,7 +179,7 @@ The clients are the CLI for now.
 | `crates/core` | ✅ |
 | `crates/cli` | ✅ |
 | `crates/server` — blob store over Garage | ✅ deployed |
-| `crates/wasm` + web | ⬜ |
+| `crates/wasm` + web | ✅ deployed |
 | `crates/ffi` + Android — Keystore, shred | ⬜ |
 
 ```bash

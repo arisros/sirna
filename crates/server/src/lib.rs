@@ -10,3 +10,4 @@ pub mod api;
 pub mod db;
 pub mod limit;
 pub mod store;
+pub mod web;

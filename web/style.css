@@ -1,0 +1,78 @@
+/* No web fonts, no CDN, no analytics. Every external origin in a page that
+   handles keys is an exfiltration channel, so there are none. */
+:root {
+  --bg: #12100f;
+  --fg: #e8e3dd;
+  --dim: #8d857c;
+  --line: #2e2a27;
+  --accent: #d9a441;
+  --warn: #3a2a12;
+  --done: #14261a;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #faf8f5; --fg: #1b1815; --dim: #6b635a; --line: #e2dcd3;
+    --warn: #fdf3dd; --done: #e8f4ea;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2rem 1.25rem 4rem;
+  background: var(--bg); color: var(--fg);
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  max-width: 40rem; margin-inline: auto;
+}
+header { margin-bottom: 2.5rem; }
+.wordmark {
+  font-size: 1.6rem; font-weight: 650; letter-spacing: 0.02em;
+  color: var(--fg); text-decoration: none;
+}
+.tagline { color: var(--dim); margin: 0.25rem 0 0; font-size: 0.95rem; }
+h1 { font-size: 1.35rem; margin: 0 0 1.25rem; }
+h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em;
+     color: var(--dim); margin: 2rem 0 0.6rem; }
+.card {
+  border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 1rem; margin-bottom: 1rem;
+}
+.card.warn { background: var(--warn); border-color: transparent; }
+.card.done { background: var(--done); border-color: transparent; }
+textarea, input[type="text"] {
+  width: 100%; background: transparent; color: var(--fg);
+  border: 0; font: inherit; resize: vertical; outline: none;
+}
+input[type="text"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95rem; }
+label { display: block; color: var(--dim); font-size: 0.9rem; margin-top: 0.75rem; }
+.row { display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; }
+.row label { margin: 0; }
+select, button {
+  font: inherit; padding: 0.5rem 0.9rem; border-radius: 8px;
+  border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer;
+}
+button.primary {
+  background: var(--accent); color: #17130c; border-color: transparent;
+  font-weight: 600; padding: 0.6rem 1.4rem;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+button.linky { border: 0; padding: 0; color: var(--accent); text-decoration: underline; }
+/* Numbered so a phrase can be read aloud without losing your place. */
+.words {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: 0.15rem 1rem; padding-left: 2rem; margin: 0 0 1rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95rem;
+}
+.uri, .plaintext {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem; word-break: break-all; color: var(--dim);
+  border: 1px solid var(--line); border-radius: var(--radius); padding: 0.75rem;
+}
+.plaintext { color: var(--fg); font-size: 0.95rem; white-space: pre-wrap; }
+.note { color: var(--dim); font-size: 0.9rem; }
+.status { min-height: 1.5rem; color: var(--accent); }
+footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+         color: var(--dim); font-size: 0.85rem; }
+dialog { max-width: 32rem; background: var(--bg); color: var(--fg);
+         border: 1px solid var(--line); border-radius: var(--radius); padding: 1.5rem; }
+dialog::backdrop { background: rgba(0,0,0,0.6); }
+a { color: var(--accent); }

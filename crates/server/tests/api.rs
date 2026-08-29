@@ -282,3 +282,65 @@ async fn probes_and_metrics_report_without_leaking() {
     assert!(!text.contains(&id), "metrics must not carry blob ids");
     assert!(!text.contains("treasure"));
 }
+
+#[tokio::test]
+async fn the_browser_client_is_served_and_locked_down() {
+    let h = harness();
+
+    let (status, body) = send(
+        &h.app,
+        Request::builder().uri("/").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(String::from_utf8_lossy(&body).contains("<html"));
+
+    // /m/<id> is a client-side route and must return the app, not a 404.
+    let res = h
+        .app
+        .clone()
+        .oneshot(with_peer(
+            Request::builder()
+                .uri(format!("/m/{}", "a".repeat(32)))
+                .body(Body::empty())
+                .unwrap(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    let csp = res
+        .headers()
+        .get("content-security-policy")
+        .expect("every page must carry a CSP")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    // In a page that handles keys, any external origin is an exfiltration
+    // channel. There must be none, and the policy must not permit inline
+    // script either.
+    assert!(csp.contains("default-src 'none'"));
+    assert!(csp.contains("connect-src 'self'"));
+    assert!(!csp.contains("unsafe-inline"));
+    assert!(
+        !csp.contains("http://") && !csp.contains("https://"),
+        "CSP names an external origin: {csp}"
+    );
+}
+
+#[tokio::test]
+async fn a_malformed_api_path_does_not_return_the_web_app() {
+    // Answering a bad API call with HTML and a 200 hides typos and confuses
+    // clients.
+    let h = harness();
+    let (status, _) = send(
+        &h.app,
+        Request::builder()
+            .uri("/api/v1/nonsense")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

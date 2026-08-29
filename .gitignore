@@ -10,3 +10,6 @@
 *.db-shm
 .env
 .DS_Store
+
+# wasm-pack output is a build artifact; the copies in web/ are what ship.
+/crates/wasm/pkg

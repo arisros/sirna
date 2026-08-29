@@ -40,6 +40,9 @@ pub fn router<S: BlobStore>(state: Shared<S>) -> Router {
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz::<S>))
         .route("/metrics", get(metrics::<S>))
+        // Everything else is the browser client, including the client-side
+        // /m/<id> route.
+        .fallback(crate::web::serve)
         // Without an explicit cap, a single large POST can drive the pod into
         // its memory limit and take the service down. There is no such cap
         // anywhere in OTM, which is exactly why one is here.
