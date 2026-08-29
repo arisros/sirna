@@ -7,23 +7,45 @@ procedure for it exists anywhere in the homelab repo — `garage-secrets` holds
 only `rpc-secret`, `admin-token` and `metrics-token`. So this is step one, and
 it is written down here because it was not written down anywhere else.
 
+Every `garage` call needs `-c /config/garage.toml`. The config is mounted from a
+ConfigMap, not at the default path, and without the flag the CLI fails with
+`Unable to read configuration file /etc/garage.toml` — which reads like a broken
+install rather than a missing flag.
+
 ```bash
-kubectl -n apps exec -it garage-0 -- /garage status            # layout must be assigned
-kubectl -n apps exec -it garage-0 -- /garage bucket create sirna-blobs
-kubectl -n apps exec -it garage-0 -- /garage key create sirna-app
+G="kubectl -n apps exec garage-0 -- /garage -c /config/garage.toml"
+
+$G status            # check the layout
+```
+
+**A fresh Garage has `NO ROLE ASSIGNED` and cannot store anything.** This
+homelab's instance ran for four months in that state because nothing had ever
+used it. Assign a layout once, before the first bucket:
+
+```bash
+NODE=$($G status | grep -A2 "HEALTHY NODES" | tail -1 | awk '{print $1}')
+$G layout assign -z homelab -c 15G "$NODE"   # 15G of a 20Gi PVC, leaving headroom
+$G layout apply --version 1
+```
+
+Then the bucket and key:
+
+```bash
+$G bucket create sirna-blobs
+$G key create sirna-app
 ```
 
 **The key ID and secret are printed once.** Capture them now.
 
 ```bash
-kubectl -n apps exec -it garage-0 -- \
-  /garage bucket allow --read --write sirna-blobs --key sirna-app
+$G bucket allow --read --write sirna-blobs --key sirna-app
 
-# The 20 GiB PVC is shared. An upload endpoint with no quota will eventually
-# eat all of it.
-kubectl -n apps exec -it garage-0 -- \
-  /garage bucket set-quotas sirna-blobs --max-size 5G
+# The PVC is shared. An upload endpoint with no quota eventually eats all of it.
+$G bucket set-quotas sirna-blobs --max-size 5G
 ```
+
+`key create` prints the secret once. `$G key info --show-secret sirna-app`
+retrieves it later; `$G key list` gives the key ID.
 
 ## 2. Create the Secret
 
@@ -70,10 +92,12 @@ Four hops, and each one has bitten this homelab before.
 Cloudflare → VPS Caddy 2.6.2 → WireGuard → caddy-homelab 2.11 → NodePort 30601 → pod
 ```
 
-**Firewall first.** The homelab `INPUT` policy is DROP with per-port allows on
-`wg0`. Check how 30102 is currently permitted and replicate it for 30601.
-Skipping this produces a silent connection timeout that looks exactly like a
-Caddy misconfiguration.
+**Firewall: nothing to do, despite what the homelab deployment guide says.**
+That guide describes an `INPUT` policy of DROP with per-port allows on `wg0`.
+Checked on 2026-08-30, the live policy is **ACCEPT** with no per-NodePort rules,
+and OTM on 30102 reaches the outside with no allow rule of its own. Verify
+before assuming either way — `iptables -L INPUT -n | head -3` — but do not go
+hunting for a rule to copy that does not exist.
 
 **`vps/caddy/Caddyfile.homelab`:**
 
