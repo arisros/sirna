@@ -20,6 +20,7 @@ pub mod error;
 pub mod header;
 pub mod key;
 pub mod meta;
+pub mod release;
 
 pub use envelope::{
     open, open_with_passphrase, seal, seal_with_key, seal_with_passphrase, Opened, SealOptions,
@@ -28,6 +29,7 @@ pub use error::{ErrorCode, Result};
 pub use header::{Header, CHUNK_LOG2_DEFAULT, CHUNK_LOG2_MAX, CHUNK_LOG2_MIN};
 pub use key::SecretKey;
 pub use meta::{ContentKind, Meta};
+pub use release::{seal_release, short_auth_string, verify_receipt, OwnerIdentity, ReaderSession};
 
 /// The envelope version this build produces and accepts.
 pub const FORMAT_VERSION: u8 = header::VERSION;

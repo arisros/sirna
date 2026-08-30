@@ -196,3 +196,35 @@ fn a_random_key_envelope_is_not_openable_as_a_passphrase_one() {
         ErrorCode::KeyDecodeFailed
     );
 }
+
+#[test]
+fn a_phrase_parses_however_a_human_pasted_it() {
+    // Copying 24 words out of a numbered list separates them with newlines, out
+    // of a chat message with double spaces, out of a terminal with indentation.
+    // All the same phrase to the person holding it, so all must work — the
+    // alternative is telling someone their correct key is wrong.
+    let key = SecretKey::from_bytes([5u8; 32]);
+    let phrase = key.to_mnemonic();
+    let words: Vec<&str> = phrase.split_whitespace().collect();
+
+    let variants = [
+        words.join("\n"),                      // copied from the numbered list
+        words.join("  "),                      // pasted through a chat client
+        format!("  {}  ", words.join(" ")),    // stray leading/trailing space
+        words.join(" \t "),                    // tabs from a terminal
+        format!("{}\r\n", words.join("\r\n")), // Windows line endings
+    ];
+
+    for (i, v) in variants.iter().enumerate() {
+        assert_eq!(
+            SecretKey::from_mnemonic(v).unwrap(),
+            key,
+            "variant {i} was rejected"
+        );
+        assert_eq!(
+            SecretKey::parse(v).unwrap(),
+            key,
+            "parse() rejected variant {i}"
+        );
+    }
+}

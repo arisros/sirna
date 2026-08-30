@@ -69,6 +69,20 @@ fn cipher(k: &[u8; 32]) -> XChaCha20Poly1305 {
     XChaCha20Poly1305::new(k.into())
 }
 
+/// Raw AEAD, for the key-release path in `release.rs`. Kept here so there is
+/// exactly one place in the crate that constructs the cipher.
+pub(crate) fn aead_seal(key: &[u8; 32], nonce: &[u8], msg: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
+    cipher(key)
+        .encrypt(XNonce::from_slice(nonce), Payload { msg, aad })
+        .map_err(|_| ErrorCode::AuthFailed)
+}
+
+pub(crate) fn aead_open(key: &[u8; 32], nonce: &[u8], ct: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
+    cipher(key)
+        .decrypt(XNonce::from_slice(nonce), Payload { msg: ct, aad })
+        .map_err(|_| ErrorCode::AuthFailed)
+}
+
 /// Seal with a freshly generated key. Returns the envelope and the key — the
 /// caller is responsible for getting the key to the reader over a *separate*
 /// channel, and for destroying its own copy.

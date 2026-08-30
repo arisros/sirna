@@ -178,7 +178,12 @@ function sealedView({ id, mnemonic, uri }) {
       { class: "words" },
       words.map((w) => el("li", {}, w)),
     ),
-    el("p", { class: "uri" }, uri),
+    // The same phrase on one selectable line. The numbered list above is for
+    // reading aloud; this is for selecting by hand when the copy button is
+    // unavailable — which on a phone is exactly when it matters, and copying
+    // from a list yields newlines rather than spaces.
+    el("p", { class: "uri selectable" }, mnemonic),
+    el("p", { class: "uri selectable" }, uri),
     el("h2", {}, "The link"),
     el("p", { class: "uri" }, link),
     el("div", { class: "row" }, copyKey, copyLink),
@@ -256,12 +261,18 @@ async function fetchAndOpen(id, key) {
 
   // Fail on a malformed envelope before asking the crypto to try, so the
   // message is about the file rather than about the key.
-  inspect(envelope);
+  //
+  // The envelope states which mode it was sealed in, so use that rather than
+  // guessing from the shape of what was typed. Guessing by whether the input
+  // contains a space fails the moment someone copies the words out of the
+  // numbered list, which separates them with newlines — and the failure looks
+  // like "that key is wrong" when the key was perfectly fine.
+  const header = inspect(envelope);
 
   const now = nowUnix();
-  const opened = key.includes(" ") || key.startsWith("sirna1:")
-    ? openEnvelope(envelope, key.trim(), now)
-    : openEnvelopeWithPassphrase(envelope, key, now);
+  const opened = header.isPassphrase
+    ? openEnvelopeWithPassphrase(envelope, key, now)
+    : openEnvelope(envelope, key.trim(), now);
 
   openedView(opened);
 }

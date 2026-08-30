@@ -85,7 +85,12 @@ impl SecretKey {
     }
 
     pub fn from_mnemonic(phrase: &str) -> Result<Self> {
-        let m = bip39::Mnemonic::parse_normalized(phrase.trim()).map_err(|e| match e {
+        // Collapse any run of whitespace to a single space. Copying 24 words
+        // out of a numbered list yields newlines, out of a chat message yields
+        // double spaces, and out of a terminal yields indentation — all of
+        // which are the same phrase to a human and none of which parse as-is.
+        let normalized = phrase.split_whitespace().collect::<Vec<_>>().join(" ");
+        let m = bip39::Mnemonic::parse_normalized(&normalized).map_err(|e| match e {
             bip39::Error::InvalidChecksum => ErrorCode::ChecksumFailed,
             _ => ErrorCode::KeyDecodeFailed,
         })?;
