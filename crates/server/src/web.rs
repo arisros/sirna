@@ -38,14 +38,24 @@ pub async fn serve(uri: Uri) -> Response {
         return (StatusCode::NOT_FOUND, "not found").into_response();
     }
 
-    // /m/<id> is a client-side route, so it has to return the app rather than
-    // a 404. Anything else unknown falls through to the app too — there is no
-    // meaningful 404 page for a single-view client.
-    let file = if path.is_empty() || !Assets::iter().any(|f| f == path) {
-        "index.html"
-    } else {
-        path
-    };
+    let known = Assets::iter().any(|f| f == path);
+
+    // /m/<id> is a client-side route and must return the app. But a path that
+    // looks like a file must NOT: answering a missing asset with index.html and
+    // a 200 turns a broken reference into something that looks like it worked,
+    // and the browser only discovers it when the HTML fails to parse as
+    // JavaScript. That is exactly how a relative `./app.js` under /m/<id>
+    // shipped unnoticed.
+    let looks_like_a_file = path
+        .rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'));
+
+    if !known && looks_like_a_file {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+
+    let file = if known { path } else { "index.html" };
 
     let Some(asset) = Assets::get(file) else {
         return (StatusCode::NOT_FOUND, "not found").into_response();

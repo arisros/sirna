@@ -15,7 +15,7 @@ import init, {
   openEnvelope,
   openEnvelopeWithPassphrase,
   inspect,
-} from "./sirna_wasm.js";
+} from "/sirna_wasm.js";
 
 const app = document.getElementById("app");
 const nowUnix = () => BigInt(Math.floor(Date.now() / 1000));

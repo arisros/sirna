@@ -392,3 +392,76 @@ async fn a_failed_delivery_still_burns_the_message() {
         "a failed delivery must not hand the message back"
     );
 }
+
+#[tokio::test]
+async fn assets_are_reachable_from_the_deep_route_too() {
+    // This is the test that was missing when a relative `./app.js` shipped.
+    // The app is served from two URL shapes, / and /m/<id>, and a reference
+    // that resolves under one and not the other produces a page that looks
+    // present but is inert. Asserting the page loads is not enough — the
+    // assets it names have to load from where the browser will ask for them.
+    let h = harness();
+
+    for path in ["/style.css", "/app.js", "/sirna_wasm.js"] {
+        let res = h
+            .app
+            .clone()
+            .oneshot(with_peer(
+                Request::builder().uri(path).body(Body::empty()).unwrap(),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), StatusCode::OK, "{path} is not served");
+        let ct = res
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        assert!(
+            !ct.starts_with("text/html"),
+            "{path} came back as HTML — the fallback is masking a missing asset"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_missing_asset_is_a_404_not_the_app() {
+    // A fallback that answers every unknown path with index.html turns a broken
+    // asset reference into a 200, and the browser only notices when the HTML
+    // fails to parse as JavaScript. Anything that looks like a file must 404.
+    let h = harness();
+
+    for path in [
+        "/m/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/app.js",
+        "/m/style.css",
+        "/nope.js",
+    ] {
+        let (status, _) = send(
+            &h.app,
+            Request::builder().uri(path).body(Body::empty()).unwrap(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{path} should be a 404");
+    }
+}
+
+#[tokio::test]
+async fn the_html_references_only_root_absolute_assets() {
+    // Relative asset paths are correct at / and wrong at /m/<id>. Catch them in
+    // the markup rather than waiting to notice a blank page on a phone.
+    let h = harness();
+    let (_, body) = send(
+        &h.app,
+        Request::builder().uri("/").body(Body::empty()).unwrap(),
+    )
+    .await;
+    let html = String::from_utf8_lossy(&body);
+
+    assert!(
+        !html.contains("=\"./"),
+        "index.html contains a relative asset path, which breaks under /m/<id>"
+    );
+}
