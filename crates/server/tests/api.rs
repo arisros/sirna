@@ -35,6 +35,7 @@ fn harness() -> Harness {
         // Generous, so the limiter does not interfere with tests that are not
         // about the limiter.
         limiter: RateLimiter::new(10_000, 10_000.0),
+        relay: sirna_server::rendezvous::Relay::new(),
         max_blob_bytes: 1024 * 1024,
         default_ttl: 3600,
         max_ttl: 86_400,
@@ -361,6 +362,7 @@ async fn a_failed_delivery_still_burns_the_message() {
         db: tokio::sync::Mutex::new(db),
         store,
         limiter: RateLimiter::new(10_000, 10_000.0),
+        relay: sirna_server::rendezvous::Relay::new(),
         max_blob_bytes: 1024 * 1024,
         default_ttl: 3600,
         max_ttl: 86_400,

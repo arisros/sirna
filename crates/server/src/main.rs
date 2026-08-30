@@ -87,6 +87,7 @@ async fn serve<S: BlobStore>(addr: SocketAddr, db: Db, store: S, settings: Setti
         db: tokio::sync::Mutex::new(db),
         store,
         limiter: RateLimiter::new(settings.rate_burst, settings.rate_per_sec),
+        relay: sirna_server::rendezvous::Relay::new(),
         max_blob_bytes: settings.max_blob_bytes,
         default_ttl: settings.default_ttl,
         max_ttl: settings.max_ttl,

@@ -25,6 +25,8 @@ pub struct AppState<S: BlobStore> {
     pub db: tokio::sync::Mutex<Db>,
     pub store: S,
     pub limiter: RateLimiter,
+    /// In-memory only, and untrusted by design — see `rendezvous`.
+    pub relay: std::sync::Arc<crate::rendezvous::Relay>,
     pub max_blob_bytes: usize,
     pub default_ttl: u64,
     pub max_ttl: u64,
@@ -40,6 +42,14 @@ pub fn router<S: BlobStore>(state: Shared<S>) -> Router {
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz::<S>))
         .route("/metrics", get(metrics::<S>))
+        // Custody mode: introduces a reader to the owner who holds the key.
+        // Colocated on purpose — it is stateless, holds no secrets and needs no
+        // storage, so it costs one deployment, one Caddy block and one
+        // certificate rather than three of each.
+        .route(
+            "/api/v1/rendezvous/{id}",
+            get(crate::rendezvous::handler::<S>),
+        )
         // Everything else is the browser client, including the client-side
         // /m/<id> route.
         .fallback(crate::web::serve)

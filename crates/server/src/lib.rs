@@ -9,5 +9,6 @@
 pub mod api;
 pub mod db;
 pub mod limit;
+pub mod rendezvous;
 pub mod store;
 pub mod web;
